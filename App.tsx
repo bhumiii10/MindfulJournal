@@ -3,7 +3,10 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import HomeScreen from './screens/HomeScreen';
 import JournalScreen from './screens/JournalScreen';
-import ChatScreen from './screens/ChatScreen'; // Import your new ChatScreen
+import ChatScreen from './screens/ChatScreen'; 
+import InsightsScreen from './screens/InsightsScreen';
+import ToolsScreen from './screens/ToolsScreen';
+import ProfileScreen from './screens/ProfileScreen';
 import { Text } from 'react-native';
 
 function TabBarIcon({ emoji }: { emoji: string }) {
@@ -47,7 +50,31 @@ export default function App() {
             tabBarIcon: () => <TabBarIcon emoji="💬" />,
           }}
         />
-        {/* Add other tabs here if needed */}
+        <Tab.Screen
+          name="Insights"
+          component={InsightsScreen}
+          options={{
+            tabBarLabel: 'Insights',
+            tabBarIcon: () => <TabBarIcon emoji="📊" />,
+          }}
+        />
+        <Tab.Screen
+          name="Tools"
+          component={ToolsScreen}
+          options={{
+            tabBarLabel: 'Tools',
+            tabBarIcon: () => <TabBarIcon emoji="🛠️" />,
+          }}
+        />
+        <Tab.Screen
+          name="Profile"
+          component={ProfileScreen}
+          options={{
+            tabBarLabel: 'Profile',
+            tabBarIcon: () => <TabBarIcon emoji="👤" />,
+          }}
+        />
+        
       </Tab.Navigator>
     </NavigationContainer>
   );
