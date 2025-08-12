@@ -10,6 +10,9 @@ import {
   Platform,
 } from 'react-native';
 
+// ✅ This should live in your client project (not import from server code)
+import { callChat, type ChatMessage } from '../api/src/services/chat';
+
 type Message = {
   id: string;
   text: string;
@@ -27,16 +30,6 @@ const initialMessages: Message[] = [
     text: "Tell me, what's been weighing on your mind lately?",
     sender: 'bot',
   },
-  {
-    id: '3',
-    text: "I've been feeling overwhelmed with work and personal life lately. Everything seems to be piling up.",
-    sender: 'user',
-  },
-  {
-    id: '4',
-    text: "That sounds really challenging. How did that make you feel? What's one small step you could take today?",
-    sender: 'bot',
-  },
 ];
 
 export default function ChatScreen() {
@@ -44,22 +37,59 @@ export default function ChatScreen() {
   const [inputText, setInputText] = useState('');
   const flatListRef = useRef<FlatList>(null);
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     if (inputText.trim() === '') return;
 
+    // 1️⃣ Add new user message to UI
     const newMessage: Message = {
       id: (messages.length + 1).toString(),
       text: inputText.trim(),
       sender: 'user',
     };
-
-    setMessages(prev => [...prev, newMessage]);
+    const updatedMessages = [...messages, newMessage];
+    setMessages(updatedMessages);
     setInputText('');
 
-    // Scroll to bottom after sending a message
     setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 100);
+
+    try {
+      // 2️⃣ Minimal Perplexity-safe payload: system + last user turn
+      const chatPayload: ChatMessage[] = [
+        {
+          role: 'system',
+          content:
+            'You are a warm and supportive journaling assistant. Keep replies short, empathetic, and encouraging.',
+        },
+        {
+          role: 'user',
+          content: inputText.trim(),
+        },
+      ];
+
+      const res = await callChat(chatPayload);
+
+      // 3️⃣ Add bot reply to chat
+      const botMessage: Message = {
+        id: (updatedMessages.length + 1).toString(),
+        text: res.reply,
+        sender: 'bot',
+      };
+      setMessages(prev => [...prev, botMessage]);
+
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    } catch (err) {
+      console.error(err);
+      const errorMsg: Message = {
+        id: (updatedMessages.length + 1).toString(),
+        text: '❌ Error getting reply. Please try again.',
+        sender: 'bot',
+      };
+      setMessages(prev => [...prev, errorMsg]);
+    }
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
@@ -89,17 +119,19 @@ export default function ChatScreen() {
         <Text style={styles.headerSub}>I'm here to help ☀️</Text>
       </View>
 
-      {/* Chat messages */}
+      {/* Chat Messages */}
       <FlatList
         ref={flatListRef}
         data={messages}
         keyExtractor={item => item.id}
         renderItem={renderMessage}
         contentContainerStyle={styles.chatMessages}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+        onContentSizeChange={() =>
+          flatListRef.current?.scrollToEnd({ animated: true })
+        }
       />
 
-      {/* Input area */}
+      {/* Input */}
       <View style={styles.chatInput}>
         <View style={styles.inputContainer}>
           <TextInput
@@ -109,7 +141,11 @@ export default function ChatScreen() {
             value={inputText}
             multiline
           />
-          <TouchableOpacity onPress={sendMessage} style={styles.sendButton} activeOpacity={0.7}>
+          <TouchableOpacity
+            onPress={sendMessage}
+            style={styles.sendButton}
+            activeOpacity={0.7}
+          >
             <Text style={styles.sendButtonText}>→</Text>
           </TouchableOpacity>
         </View>
@@ -126,21 +162,9 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     paddingHorizontal: 24,
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: 'white',
-    marginBottom: 4,
-  },
-  headerSub: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.9)',
-  },
-  chatMessages: {
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    flexGrow: 1,
-  },
+  headerTitle: { fontSize: 24, fontWeight: '600', color: 'white', marginBottom: 4 },
+  headerSub: { fontSize: 16, color: 'rgba(255,255,255,0.9)' },
+  chatMessages: { paddingHorizontal: 24, paddingVertical: 16, flexGrow: 1 },
   message: {
     maxWidth: '80%',
     borderRadius: 20,
@@ -148,26 +172,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 12,
   },
-  messageBot: {
-    backgroundColor: '#f1f5f9',
-  },
-  messageUser: {
-    backgroundColor: '#f5576c',
-  },
-  textBot: {
-    color: '#374151',
-    fontSize: 15,
-  },
-  textUser: {
-    color: 'white',
-    fontSize: 15,
-  },
-  alignLeft: {
-    alignSelf: 'flex-start',
-  },
-  alignRight: {
-    alignSelf: 'flex-end',
-  },
+  messageBot: { backgroundColor: '#f1f5f9' },
+  messageUser: { backgroundColor: '#f5576c' },
+  textBot: { color: '#374151', fontSize: 15 },
+  textUser: { color: 'white', fontSize: 15 },
+  alignLeft: { alignSelf: 'flex-start' },
+  alignRight: { alignSelf: 'flex-end' },
   chatInput: {
     borderTopColor: '#e5e7eb',
     borderTopWidth: 1,
@@ -175,11 +185,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     backgroundColor: 'white',
   },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
+  inputContainer: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   textInput: {
     flex: 1,
     borderColor: '#d1d5db',
@@ -198,9 +204,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  sendButtonText: {
-    color: 'white',
-    fontSize: 20,
-    fontWeight: '600',
-  },
+  sendButtonText: { color: 'white', fontSize: 20, fontWeight: '600' },
 });
