@@ -10,8 +10,8 @@ import {
   Platform,
 } from 'react-native';
 
-// ✅ This should live in your client project (not import from server code)
 import { callChat, type ChatMessage } from '../api/src/services/chat';
+import { ensureConversation, addMessage } from '../services/db';
 
 type Message = {
   id: string;
@@ -35,42 +35,56 @@ const initialMessages: Message[] = [
 export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [inputText, setInputText] = useState('');
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
 
   const sendMessage = async () => {
-    if (inputText.trim() === '') return;
+    const text = inputText.trim();
+    if (!text) return;
 
-    // 1️⃣ Add new user message to UI
+    // Add the user message to UI immediately
     const newMessage: Message = {
       id: (messages.length + 1).toString(),
-      text: inputText.trim(),
+      text,
       sender: 'user',
     };
     const updatedMessages = [...messages, newMessage];
     setMessages(updatedMessages);
     setInputText('');
 
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+    setTimeout(
+      () => flatListRef.current?.scrollToEnd({ animated: true }),
+      100
+    );
 
     try {
-      // 2️⃣ Minimal Perplexity-safe payload: system + last user turn
+      // Ensure we have a conversation in Firestore
+      let cid = conversationId;
+      if (!cid) {
+        cid = await ensureConversation(text.slice(0, 60)); // use first part of user message as title
+        setConversationId(cid);
+      }
+
+      // Store the user message in Firestore
+      await addMessage(cid, { role: 'user', content: text });
+
+      // Minimal payload to Perplexity to avoid invalid_message error
       const chatPayload: ChatMessage[] = [
         {
           role: 'system',
           content:
             'You are a warm and supportive journaling assistant. Keep replies short, empathetic, and encouraging.',
         },
-        {
-          role: 'user',
-          content: inputText.trim(),
-        },
+        { role: 'user', content: text },
       ];
 
+      // Call the backend API (which calls Perplexity)
       const res = await callChat(chatPayload);
 
-      // 3️⃣ Add bot reply to chat
+      // Store the assistant message in Firestore
+      await addMessage(cid, { role: 'assistant', content: res.reply });
+
+      // Add bot reply to UI
       const botMessage: Message = {
         id: (updatedMessages.length + 1).toString(),
         text: res.reply,
@@ -78,17 +92,20 @@ export default function ChatScreen() {
       };
       setMessages(prev => [...prev, botMessage]);
 
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+      setTimeout(
+        () => flatListRef.current?.scrollToEnd({ animated: true }),
+        100
+      );
     } catch (err) {
       console.error(err);
-      const errorMsg: Message = {
-        id: (updatedMessages.length + 1).toString(),
-        text: '❌ Error getting reply. Please try again.',
-        sender: 'bot',
-      };
-      setMessages(prev => [...prev, errorMsg]);
+      setMessages(prev => [
+        ...prev,
+        {
+          id: (updatedMessages.length + 1).toString(),
+          text: '❌ Error getting reply. Please try again.',
+          sender: 'bot',
+        },
+      ]);
     }
   };
 
@@ -102,7 +119,9 @@ export default function ChatScreen() {
           isUser ? styles.alignRight : styles.alignLeft,
         ]}
       >
-        <Text style={isUser ? styles.textUser : styles.textBot}>{item.text}</Text>
+        <Text style={isUser ? styles.textUser : styles.textBot}>
+          {item.text}
+        </Text>
       </View>
     );
   };
@@ -162,9 +181,18 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     paddingHorizontal: 24,
   },
-  headerTitle: { fontSize: 24, fontWeight: '600', color: 'white', marginBottom: 4 },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: 'white',
+    marginBottom: 4,
+  },
   headerSub: { fontSize: 16, color: 'rgba(255,255,255,0.9)' },
-  chatMessages: { paddingHorizontal: 24, paddingVertical: 16, flexGrow: 1 },
+  chatMessages: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    flexGrow: 1,
+  },
   message: {
     maxWidth: '80%',
     borderRadius: 20,
