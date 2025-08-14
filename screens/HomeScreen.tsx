@@ -1,14 +1,9 @@
+// screens/HomeScreen.tsx
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { useNavigation } from '@react-navigation/native';
-import { toDateISO } from '../services/db';
-
-interface Goal {
-  id: number;
-  task: string;
-  done: boolean;
-}
+import { toDateISO, onGoalsByDate, toggleGoal, deleteGoal } from '../services/db';
 
 const moodOptions = [
   { emoji: '☀️', label: 'Great' },
@@ -19,42 +14,30 @@ const moodOptions = [
   { emoji: '🌨️', label: 'Overwhelmed' },
 ];
 
-const goalsList: Goal[] = [
-  { id: 1, task: 'Morning meditation (10 min)', done: false },
-  { id: 2, task: 'Take a walk outside', done: false },
-  { id: 3, task: 'Drink 8 glasses of water', done: true },
-];
-
 export default function HomeScreen() {
-  
-  const [selectedMood, setSelectedMood] = useState<string | null>(null);
-  const [goals, setGoals] = useState<Goal[]>(goalsList);
+  const navigation = useNavigation<any>();
   const [selectedDate, setSelectedDate] = useState(toDateISO());
+  const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [markedDates, setMarkedDates] = useState({});
-  const navigation = useNavigation<any>(); 
+  const [goals, setGoals] = useState<any[]>([]);
 
-  // You can query Firestore here to mark all dates with existing journal entries
+  // Mark today by default
   useEffect(() => {
-    const today = toDateISO();
     setMarkedDates({
-      [today]: { selected: true, marked: true, selectedColor: '#a25cb2' }
+      [toDateISO()]: { selected: true, marked: true, selectedColor: '#a25cb2' },
     });
   }, []);
 
-  const toggleGoal = (id: number) => {
-    setGoals(goals.map(goal => goal.id === id ? { ...goal, done: !goal.done } : goal));
-  };
+  // Realtime goals data
+  useEffect(() => {
+    const unsubscribe = onGoalsByDate(selectedDate, setGoals);
+    return () => unsubscribe && unsubscribe();
+  }, [selectedDate]);
 
-  const onDayPress = async (day: { dateString: string }) => {
+  const onDayPress = (day: { dateString: string }) => {
     setSelectedDate(day.dateString);
-  
-    // maybe you tried to do convo lookup here...
-    // const convoId = await getDailyConversationId(day.dateString);
-  
-    // Navigate to the journal screen directly with the date
     navigation.navigate('Journal', { journalDate: day.dateString });
   };
-  
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 100 }}>
@@ -70,32 +53,26 @@ export default function HomeScreen() {
         <Calendar
           markedDates={{
             ...markedDates,
-            [selectedDate]: { selected: true, marked: true, selectedColor: '#a25cb2' }
+            [selectedDate]: { selected: true, marked: true, selectedColor: '#a25cb2' },
           }}
           onDayPress={onDayPress}
-          theme={{
-            todayTextColor: '#f093fb',
-            arrowColor: '#a25cb2',
-          }}
+          theme={{ todayTextColor: '#f093fb', arrowColor: '#a25cb2' }}
         />
       </View>
 
-      {/* Mood Grid */}
+      {/* Mood Check */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Quick Mood Check</Text>
         <View style={styles.moodGrid}>
-          {moodOptions.map((mood, index) => (
+          {moodOptions.map((m, i) => (
             <TouchableOpacity
-              key={index}
-              style={[
-                styles.moodItem,
-                selectedMood === mood.label && styles.moodItemSelected,
-              ]}
-              onPress={() => setSelectedMood(mood.label)}
+              key={i}
+              style={[styles.moodItem, selectedMood === m.label && styles.moodItemSelected]}
+              onPress={() => setSelectedMood(m.label)}
               activeOpacity={0.7}
             >
-              <Text style={styles.weatherIcon}>{mood.emoji}</Text>
-              <Text>{mood.label}</Text>
+              <Text style={styles.weatherIcon}>{m.emoji}</Text>
+              <Text>{m.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -103,19 +80,24 @@ export default function HomeScreen() {
 
       {/* Goals */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Today's Goals</Text>
+        <Text style={styles.cardTitle}>Goals for {selectedDate}</Text>
+        {goals.length === 0 && <Text style={{ color: '#888' }}>No goals for this date yet.</Text>}
         {goals.map(goal => (
-          <TouchableOpacity
-            key={goal.id}
-            style={styles.goalItem}
-            onPress={() => toggleGoal(goal.id)}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.checkbox, goal.done && styles.checkboxChecked]} />
-            <Text style={[styles.goalText, goal.done && styles.goalDone]}>
-              {goal.task}
-            </Text>
-          </TouchableOpacity>
+          <View key={goal.id} style={styles.goalRow}>
+            <TouchableOpacity
+              style={styles.goalToggle}
+              onPress={() => toggleGoal(goal.id, !Boolean(goal.done))}
+            >
+              <View style={[styles.checkbox, goal.done && styles.checkboxChecked]} />
+              <Text style={[styles.goalText, goal.done && styles.goalDone]}>{goal.title}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={() => deleteGoal(goal.id)}
+            >
+              <Text style={styles.deleteText}>🗑</Text>
+            </TouchableOpacity>
+          </View>
         ))}
       </View>
     </ScrollView>
@@ -158,13 +140,17 @@ const styles = StyleSheet.create({
   },
   moodItemSelected: { backgroundColor: '#ede9fe', borderColor: '#a25cb2' },
   weatherIcon: { fontSize: 32, marginBottom: 8 },
-  goalItem: {
+  goalRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    justifyContent: 'space-between',
+    paddingVertical: 8,
     borderBottomColor: '#e5e7eb',
     borderBottomWidth: 1,
   },
+  goalToggle: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  deleteButton: { padding: 6 },
+  deleteText: { fontSize: 18, color: '#f5576c', fontWeight: '600' },
   checkbox: { width: 20, height: 20, borderWidth: 2, borderColor: '#d1d5db', borderRadius: 4, marginRight: 12 },
   checkboxChecked: { backgroundColor: '#a25cb2', borderColor: '#a25cb2' },
   goalText: { fontSize: 15, color: '#17435c' },

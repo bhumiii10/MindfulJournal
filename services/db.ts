@@ -130,3 +130,72 @@ export async function getMessages(conversationId: string) {
     ...doc.data()
   })) as (StoredMessage & { id: string })[];
 }
+
+/**
+ * Add a manual goal
+ */
+export async function addGoal(title: string, dateISO: string, sourceConversationId?: string) {
+  const uid = getAuth(getApp()).currentUser?.uid;
+  console.log('[addGoal]', { uid, title, dateISO });
+  if (!uid) throw new Error('Not signed in');
+
+  await firestore()
+    .collection(`users/${uid}/goals`)
+    .add({
+      title,
+      done: false,
+      date: dateISO,
+      sourceConversationId: sourceConversationId ?? null,
+      createdAt: firestore.FieldValue.serverTimestamp(),
+    });
+}
+
+/**
+ * Toggle a goal's completion state
+ */
+export async function toggleGoal(goalId: string, done: boolean) {
+  const uid = getAuth(getApp()).currentUser?.uid;
+  if (!uid) throw new Error('Not signed in');
+
+  await firestore()
+    .doc(`users/${uid}/goals/${goalId}`)
+    .update({ done });
+}
+
+/**
+ * Delete a specific goal
+ */
+export async function deleteGoal(goalId: string) {
+  const uid = getAuth(getApp()).currentUser?.uid;
+  if (!uid) throw new Error('Not signed in');
+
+  await firestore()
+    .doc(`users/${uid}/goals/${goalId}`)
+    .delete();
+}
+
+/**
+ * Realtime listener for all goals on a given date
+ */
+export function onGoalsByDate(dateISO: string, callback: (rows: any[]) => void) {
+  const uid = getAuth(getApp()).currentUser?.uid;
+  console.log('[onGoalsByDate] subscribe for date', dateISO);
+
+  if (!uid) throw new Error('Not signed in');
+
+  return firestore()
+    .collection(`users/${uid}/goals`)
+    .where('date', '==', dateISO)
+    .orderBy('createdAt', 'asc')
+    .onSnapshot(
+      (snap) => {
+        const rows = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+        console.log('[onGoalsByDate] snapshot size', snap.size);
+
+        callback(rows);
+      },
+      (error) => {
+        console.error('onGoalsByDate error:', error);
+      }
+    );
+}
