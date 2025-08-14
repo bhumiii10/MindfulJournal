@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { getAuth } from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
+import { ensureDailyConversation, toDateISO } from '../services/db';
 
 type Mood = {
   emoji: string;
@@ -15,50 +19,41 @@ const moodOptions: Mood[] = [
   { emoji: '🌨️', label: 'Snowy' },
 ];
 
-// Example weather messages (extend as needed)
-const weatherMessages: Record<string, { title: string; message: string }> = {
-  Stormy: {
-    title: "Storms can feel overwhelming, but they always pass. Let's work together to find your sunshine!",
-    message: "You're stronger than you know, and I'm here to help you through this storm.",
-  },
-  // Add more messages per mood as needed
-};
-
-export default function JournalScreen() {
+export default function JournalScreen({ route }: any) {
+  const navigation = useNavigation<any>();
+  const journalDate = route?.params?.journalDate || toDateISO();
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
 
-  const handleMoodSelect = (label: string) => setSelectedMood(label);
+  const handleMoodSelect = async (label: string) => {
+    try {
+      setSelectedMood(label);
 
-  // Render after selection (weather-message)
-  if (selectedMood && weatherMessages[selectedMood]) {
-    return (
-      <View style={styles.weatherMessageContainer}>
-        <Text style={styles.weatherIconLarge}>
-          {moodOptions.find(m => m.label === selectedMood)?.emoji || ''}
-        </Text>
-        <Text style={styles.weatherMessageTitle}>
-          {weatherMessages[selectedMood].title}
-        </Text>
-        <Text style={styles.weatherMessageBody}>
-          {weatherMessages[selectedMood].message}
-        </Text>
-        <TouchableOpacity style={styles.button} onPress={() => {/* handle navigation to talk screen */}}>
-          <Text style={styles.buttonText}>Let's Talk About It</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+      // Ensure a conversation for this date exists
+      const cid = await ensureDailyConversation(journalDate, `Journal for ${journalDate}`);
+      const uid = getAuth().currentUser?.uid;
+      if (!uid) return;
 
-  // Journal mood selection screen
+      // Save mood to the conversation doc
+      await firestore()
+        .doc(`users/${uid}/conversations/${cid}`)
+        .set({ mood: label }, { merge: true });
+
+      // Navigate straight to ChatScreen for that date
+      navigation.navigate('Chat', { journalDate });
+    } catch (err) {
+      console.error('Error saving mood:', err);
+    }
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 100 }}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Journal</Text>
+        <Text style={styles.headerTitle}>Journal – {journalDate}</Text>
         <Text style={styles.headerSub}>Let's explore your thoughts</Text>
       </View>
 
-      {/* Mood Select Card */}
+      {/* Mood picker */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>How's your weather today?</Text>
         <View style={styles.moodGrid}>
@@ -140,48 +135,5 @@ const styles = StyleSheet.create({
   weatherIcon: {
     fontSize: 32,
     marginBottom: 8,
-  },
-  // Weather message style
-  weatherMessageContainer: {
-    backgroundColor: '#fef3f2',
-    borderColor: '#fecaca',
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 24,
-    margin: 24,
-    marginTop: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-  },
-  weatherIconLarge: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  weatherMessageTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: 8,
-    color: '#f5576c',
-  },
-  weatherMessageBody: {
-    textAlign: 'center',
-    color: '#374151',
-    marginBottom: 20,
-  },
-  button: {
-    backgroundColor: '#f5576c',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    marginTop: 10,
-    width: '100%',
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: '600',
-    textAlign: 'center',
-    fontSize: 16,
   },
 });

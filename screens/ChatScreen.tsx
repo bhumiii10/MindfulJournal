@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,13 @@ import {
 } from 'react-native';
 
 import { callChat, type ChatMessage } from '../api/src/services/chat';
-import { ensureConversation, addMessage } from '../services/db';
+import {
+  ensureDailyConversation,
+  addMessage,
+  toDateISO,
+  getMessages,
+  getDailyConversationId,
+} from '../services/db';
 
 type Message = {
   id: string;
@@ -19,30 +25,54 @@ type Message = {
   sender: 'bot' | 'user';
 };
 
-const initialMessages: Message[] = [
-  {
-    id: '1',
-    text: "Hey there! I noticed you're feeling a bit stormy today. Let's work together to bring some sunshine into your day! ☀️",
-    sender: 'bot',
-  },
-  {
-    id: '2',
-    text: "Tell me, what's been weighing on your mind lately?",
-    sender: 'bot',
-  },
-];
 
-export default function ChatScreen() {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+
+export default function ChatScreen({ route }: any) {
+  const journalDate = route?.params?.journalDate || toDateISO();
+  const initialConversationId = route?.params?.conversationId || null;
+
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(
+    initialConversationId
+  );
   const flatListRef = useRef<FlatList>(null);
+
+  // Load existing messages for this date
+  useEffect(() => {
+    let cancelled = false;
+  
+    async function loadMessagesForDay() {
+      setConversationId(null); // force re-detection for new date
+      setMessages([]); // clear UI for fresh start
+  
+      const cid = await getDailyConversationId(journalDate);
+      if (cancelled) return;
+  
+      if (!cid) return; // no convo for this date yet
+      setConversationId(cid);
+  
+      const docs = await getMessages(cid);
+      if (cancelled) return;
+  
+      const mapped: Message[] = docs.map((m: any, idx: number) => ({
+        id: String(idx + 1),
+        text: m.content,
+        sender: m.role === 'user' ? 'user' : 'bot',
+      }));
+      setMessages(mapped);
+    }
+  
+    loadMessagesForDay();
+    return () => { cancelled = true; };
+  }, [journalDate]);
+  
 
   const sendMessage = async () => {
     const text = inputText.trim();
     if (!text) return;
 
-    // Add the user message to UI immediately
+    // Show user message instantly in UI
     const newMessage: Message = {
       id: (messages.length + 1).toString(),
       text,
@@ -52,23 +82,21 @@ export default function ChatScreen() {
     setMessages(updatedMessages);
     setInputText('');
 
-    setTimeout(
-      () => flatListRef.current?.scrollToEnd({ animated: true }),
-      100
-    );
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
 
     try {
-      // Ensure we have a conversation in Firestore
       let cid = conversationId;
       if (!cid) {
-        cid = await ensureConversation(text.slice(0, 60)); // use first part of user message as title
+        cid = await ensureDailyConversation(journalDate, text);
         setConversationId(cid);
       }
 
-      // Store the user message in Firestore
+      if (!cid) throw new Error('Conversation ID missing');
+
+      // Save user message
       await addMessage(cid, { role: 'user', content: text });
 
-      // Minimal payload to Perplexity to avoid invalid_message error
+      // Prepare minimal safe payload for Perplexity
       const chatPayload: ChatMessage[] = [
         {
           role: 'system',
@@ -78,30 +106,26 @@ export default function ChatScreen() {
         { role: 'user', content: text },
       ];
 
-      // Call the backend API (which calls Perplexity)
       const res = await callChat(chatPayload);
 
-      // Store the assistant message in Firestore
+      // Save assistant message
       await addMessage(cid, { role: 'assistant', content: res.reply });
 
-      // Add bot reply to UI
+      // Show reply in UI
       const botMessage: Message = {
         id: (updatedMessages.length + 1).toString(),
         text: res.reply,
         sender: 'bot',
       };
-      setMessages(prev => [...prev, botMessage]);
+      setMessages((prev) => [...prev, botMessage]);
 
-      setTimeout(
-        () => flatListRef.current?.scrollToEnd({ animated: true }),
-        100
-      );
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (err) {
       console.error(err);
-      setMessages(prev => [
+      setMessages((prev) => [
         ...prev,
         {
-          id: (updatedMessages.length + 1).toString(),
+          id: (messages.length + 1).toString(),
           text: '❌ Error getting reply. Please try again.',
           sender: 'bot',
         },
@@ -119,9 +143,7 @@ export default function ChatScreen() {
           isUser ? styles.alignRight : styles.alignLeft,
         ]}
       >
-        <Text style={isUser ? styles.textUser : styles.textBot}>
-          {item.text}
-        </Text>
+        <Text style={isUser ? styles.textUser : styles.textBot}>{item.text}</Text>
       </View>
     );
   };
@@ -134,15 +156,15 @@ export default function ChatScreen() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Let's Talk</Text>
+        <Text style={styles.headerTitle}>Journal – {journalDate}</Text>
         <Text style={styles.headerSub}>I'm here to help ☀️</Text>
       </View>
 
-      {/* Chat Messages */}
+      {/* Messages */}
       <FlatList
         ref={flatListRef}
         data={messages}
-        keyExtractor={item => item.id}
+        keyExtractor={(item) => item.id}
         renderItem={renderMessage}
         contentContainerStyle={styles.chatMessages}
         onContentSizeChange={() =>
@@ -182,7 +204,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '600',
     color: 'white',
     marginBottom: 4,
@@ -234,3 +256,4 @@ const styles = StyleSheet.create({
   },
   sendButtonText: { color: 'white', fontSize: 20, fontWeight: '600' },
 });
+
