@@ -199,3 +199,76 @@ export function onGoalsByDate(dateISO: string, callback: (rows: any[]) => void) 
       }
     );
 }
+
+// ---------------------------------------------------
+// TYPES
+// ---------------------------------------------------
+export type ChatSuggestion = {
+  id: string;
+  title: string;
+  date: string; // YYYY-MM-DD
+  source: 'chat';
+  createdAt: FirebaseFirestoreTypes.FieldValue | number;
+};
+
+// ---------------------------------------------------
+// ADD SUGGESTIONS FROM CHAT
+// ---------------------------------------------------
+export async function addChatSuggestions(
+  conversationId: string,
+  dateISO: string,
+  titles: string[]
+) {
+  const uid = getAuth(getApp()).currentUser?.uid;
+  if (!uid) throw new Error('Not signed in');
+  if (!conversationId) throw new Error('Conversation ID required');
+  if (!titles || titles.length === 0) return;
+
+  const batch = firestore().batch();
+  const colRef = firestore().collection(
+    `users/${uid}/conversations/${conversationId}/suggestions`
+  );
+
+  const now = firestore.FieldValue.serverTimestamp();
+
+  titles.forEach((title) => {
+    const docRef = colRef.doc();
+    batch.set(docRef, {
+      title: title.trim(),
+      date: dateISO,
+      source: 'chat',
+      createdAt: now,
+    });
+  });
+
+  await batch.commit();
+}
+
+// ---------------------------------------------------
+// REALTIME LISTENER FOR CHAT SUGGESTIONS BY DATE
+// ---------------------------------------------------
+export function onChatSuggestionsByDate(
+  conversationId: string,
+  dateISO: string,
+  callback: (rows: ChatSuggestion[]) => void
+) {
+  const uid = getAuth(getApp()).currentUser?.uid;
+  if (!uid) throw new Error('Not signed in');
+  if (!conversationId) throw new Error('Conversation ID required');
+
+  return firestore()
+    .collection(`users/${uid}/conversations/${conversationId}/suggestions`)
+    .where('date', '==', dateISO)
+    .orderBy('createdAt', 'desc')
+    .onSnapshot(
+      (snap) => {
+        const rows = snap.docs.map(
+          (d) => ({ id: d.id, ...(d.data() as any) }) as ChatSuggestion
+        );
+        callback(rows);
+      },
+      (error) => {
+        console.error('onChatSuggestionsByDate error:', error);
+      }
+    );
+}
