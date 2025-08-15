@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,8 @@ import {
   addChatSuggestions
 } from '../services/db';
 
+import { toolsCatalog } from '../data/tools';
+
 type Message = {
   id: string;
   text: string;
@@ -28,15 +30,13 @@ type Message = {
 
 // Keep goals brief, verb-first (or time-based), realistic
 function keepGoal(raw: string): string | null {
-  let t = raw.replace(/^[-*•\s]+/, '').trim();
+  let t = raw.replace(/^[-\\*•\s]+/, '').trim();
   if (!t) return null;
 
-  // allow a little room; UI truncates anyway
   const words = t.split(/\s+/).length;
   if (words < 2 || words > 9) return null;
   if (t.length > 80) t = t.slice(0, 77).trim() + '…';
 
-  // verb-first or time-based (“5-minute …”, “10 min …”)
   const verbs = [
     'walk','drink','write','text','call','stretch','breathe','tidy','plan','read',
     'meditate','journal','hydrate','email','organize','prep','cook','clean','sort',
@@ -50,7 +50,6 @@ function keepGoal(raw: string): string | null {
 
   if (!startsWithVerbOrTimey) return null;
 
-  // avoid too-vague single-word imperatives
   if (/^(breathe|hydrate|journal|walk|stretch|meditate|clean|plan|read)$/i.test(t)) return null;
 
   return t;
@@ -72,7 +71,6 @@ function uniqueGoalsShort(goals: string[], cap = 5): string[] {
 
 // Basic extractor from reply (safe fallback)
 async function extractGoalsFromReply(reply: string): Promise<string[]> {
-  // Favor lines near the end of the reply
   const lines = reply.split('\n').map((l) => l.trim()).filter(Boolean);
   const tail = lines.slice(-8);
   const pool = tail.length ? tail : lines;
@@ -89,12 +87,28 @@ async function extractGoalsFromReply(reply: string): Promise<string[]> {
 export default function ChatScreen({ route }: any) {
   const journalDate = route?.params?.journalDate || toDateISO();
   const initialConversationId = route?.params?.conversationId || null;
+  const initialToolId = route?.params?.toolId as string | undefined;
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
-  const [conversationId, setConversationId] = useState<string | null>(
-    initialConversationId
+  const [conversationId, setConversationId] = useState<string | null>(initialConversationId);
+  const [guided, setGuided] = useState<{ toolId: string; stepIndex: number } | null>(
+    initialToolId ? { toolId: initialToolId, stepIndex: 0 } : null
   );
+
+  // Pick up a toolId that arrives later (e.g., via navigate/replace)
+  useEffect(() => {
+    const nextId = route?.params?.toolId as string | undefined;
+    if (nextId && !guided) {
+      setGuided({ toolId: nextId, stepIndex: 0 });
+    }
+  }, [route?.params?.toolId, guided]);
+
+  const guidedTool = useMemo(
+    () => (guided ? toolsCatalog.find(t => t.id === guided.toolId) : null),
+    [guided]
+  );
+
   const flatListRef = useRef<FlatList>(null);
 
   // Load existing messages for this date
@@ -126,6 +140,87 @@ export default function ChatScreen({ route }: any) {
     return () => { cancelled = true; };
   }, [journalDate]);
 
+  // Post guided intro + Step 1 if guided mode active
+  useEffect(() => {
+    let cancelled = false;
+    async function maybeIntro() {
+      if (!guided || !guidedTool) return;
+
+      let cid = conversationId;
+      if (!cid) {
+        cid = await ensureDailyConversation(journalDate, `Start: ${guidedTool.title}`);
+        if (cancelled) return;
+        setConversationId(cid);
+      }
+      if (!cid) return;
+
+      // Only skip if we already posted the exact intro for this tool
+      const isSameToolIntro = messages.some(
+        m => m.sender === 'bot' && m.text.startsWith(`Let’s do “${guidedTool.title}”`)
+      );
+      if (isSameToolIntro) return;
+
+      const intro = [
+        `Let’s do “${guidedTool.title}” (${guidedTool.durationMin}min, ${guidedTool.skill}).`,
+        `We’ll go one step at a time. Ready?`,
+        `Step 1: ${guidedTool.steps[0]}`
+      ].join('\n');
+
+      try {
+        await addMessage(cid, { role: 'assistant', content: intro });
+      } catch (e) {
+        console.error('[ChatScreen] addMessage intro failed', e);
+      }
+      if (cancelled) return;
+      setMessages(prev => [
+        ...prev,
+        { id: (prev.length + 1).toString(), text: intro, sender: 'bot' }
+      ]);
+    }
+    maybeIntro();
+    return () => { cancelled = true; };
+  }, [guided, guidedTool, conversationId, journalDate, messages]);
+
+  // Sends a normal (non-guided) bot reply using your existing chat call
+  const sendNormalReply = async (text: string, updatedMessages: Message[], cid: string) => {
+    const chatPayload: ChatMessage[] = [
+      {
+        role: 'system',
+        content: `
+You are a warm, non-judgmental journaling assistant that helps build emotional resilience.
+Use these skills when relevant: Goal Setting, Strengths, Flexible Thinking, Problem Solving, Self-Acceptance, Emotional Regulation, Coping Skills, Optimistic Thinking.
+Guidelines:
+- 2–4 short sentences.
+- Empathy first: reflect and normalize.
+- Then one small, concrete nudge (no lectures, no long lists).
+
+At the very end of your reply, add 3–5 micro-goals for TODAY, each on its own line:
+- 2–6 words
+- starts with a verb or time hint (e.g., “5-minute …”)
+- doable in ≤15 minutes
+- examples: "Drink 1 glass water", "5-minute stretch", "List 3 gratitudes", "Text a friend hello".
+        `.trim(),
+      },
+      { role: 'user', content: text },
+    ];
+
+    const res = await callChat(chatPayload);
+
+    await addMessage(cid, { role: 'assistant', content: res.reply });
+
+    const botMessage: Message = {
+      id: (updatedMessages.length + 1).toString(),
+      text: res.reply,
+      sender: 'bot',
+    };
+    setMessages((prev) => [...prev, botMessage]);
+
+    const goalsFromChat = await extractGoalsFromReply(res.reply);
+    if (goalsFromChat.length > 0) {
+      await addChatSuggestions(cid, journalDate, goalsFromChat);
+    }
+  };
+
   const sendMessage = async () => {
     const text = inputText.trim();
     if (!text) return;
@@ -153,46 +248,50 @@ export default function ChatScreen({ route }: any) {
       // Save user message
       await addMessage(cid, { role: 'user', content: text });
 
-      // Empathetic, concise reply aligned with resilience wheel, with micro-goals at the end
-      const chatPayload: ChatMessage[] = [
-        {
-          role: 'system',
-          content: `
-You are a warm, non-judgmental journaling assistant that helps build emotional resilience.
-Use these skills when relevant: Goal Setting, Strengths, Flexible Thinking, Problem Solving, Self-Acceptance, Emotional Regulation, Coping Skills, Optimistic Thinking.
-Guidelines:
-- 2–4 short sentences.
-- Empathy first: reflect and normalize.
-- Then one small, concrete nudge (no lectures, no long lists).
+      // If guided mode is active, advance the scripted steps locally
+      if (guided && guidedTool) {
+        const steps = guidedTool.steps;
+        const current = guided.stepIndex;
+        const next = current + 1;
 
-At the very end of your reply, add 3–5 micro-goals for TODAY, each on its own line:
-- 2–6 words
-- starts with a verb or time hint (e.g., “5-minute …”)
-- doable in ≤15 minutes
-- examples: "Drink 1 glass water", "5-minute stretch", "List 3 gratitudes", "Text a friend hello".
-        `.trim(),
-        },
-        { role: 'user', content: text },
-      ];
+        if (next < steps.length) {
+          // advance to next step
+          setGuided({ ...guided, stepIndex: next });
+          const botText = `Great. Step ${next + 1}: ${steps[next]}`;
+          await addMessage(cid, { role: 'assistant', content: botText });
+          setMessages(prev => [
+            ...prev,
+            { id: (prev.length + 1).toString(), text: botText, sender: 'bot' },
+          ]);
+          return;
+        } else {
+          // completed last step
+          setGuided(null);
+          const wrap = [
+            `Nice work on “${guidedTool.title}”.`,
+            `In one line, what did you notice in your body or mind?`,
+            `Tiny follow-ups for today:`,
+            `- ${guidedTool.goalTitle}`,
+            `- 3-minute check-in later`,
+            `- Share one insight with someone`,
+          ].join('\n');
 
-      const res = await callChat(chatPayload);
+          await addMessage(cid, { role: 'assistant', content: wrap });
+          setMessages(prev => [
+            ...prev,
+            { id: (prev.length + 1).toString(), text: wrap, sender: 'bot' },
+          ]);
 
-      // Save assistant message
-      await addMessage(cid, { role: 'assistant', content: res.reply });
-
-      // Show reply in UI
-      const botMessage: Message = {
-        id: (updatedMessages.length + 1).toString(),
-        text: res.reply,
-        sender: 'bot',
-      };
-      setMessages((prev) => [...prev, botMessage]);
-
-      // Extract short, realistic goals and write as suggestions
-      const goalsFromChat = await extractGoalsFromReply(res.reply);
-      if (goalsFromChat.length > 0) {
-        await addChatSuggestions(cid, journalDate, goalsFromChat);
+          const goalsFromChat = await extractGoalsFromReply(wrap);
+          if (goalsFromChat.length) {
+            await addChatSuggestions(cid, journalDate, goalsFromChat);
+          }
+          return;
+        }
       }
+
+      // Otherwise, do normal empathetic reply
+      await sendNormalReply(text, updatedMessages, cid);
 
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     } catch (err) {
@@ -223,6 +322,8 @@ At the very end of your reply, add 3–5 micro-goals for TODAY, each on its own 
     );
   };
 
+  const guidedBadge = guidedTool ? ` • Guided: ${guidedTool.title}` : '';
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -231,8 +332,8 @@ At the very end of your reply, add 3–5 micro-goals for TODAY, each on its own 
     >
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Journal – {journalDate}</Text>
-        <Text style={styles.headerSub}>I'm here to help ☀️</Text>
+        <Text style={styles.headerTitle}>Journal – {journalDate}{guidedBadge}</Text>
+        <Text style={styles.headerSub}>{guidedTool ? 'Step-by-step coach mode' : "I'm here to help ☀️"}</Text>
       </View>
 
       {/* Messages */}
@@ -252,7 +353,7 @@ At the very end of your reply, add 3–5 micro-goals for TODAY, each on its own 
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.textInput}
-            placeholder="Share what's on your mind..."
+            placeholder={guidedTool ? 'Reply when you finish each step…' : 'Share what’s on your mind…'}
             onChangeText={setInputText}
             value={inputText}
             multiline
@@ -331,7 +432,3 @@ const styles = StyleSheet.create({
   },
   sendButtonText: { color: 'white', fontSize: 20, fontWeight: '600' },
 });
-
-
-
-

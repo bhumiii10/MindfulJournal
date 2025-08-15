@@ -35,6 +35,7 @@ const norm = (s: string) =>
 export default function JournalScreen({ route }: any) {
   const navigation = useNavigation<any>();
   const journalDate = route?.params?.journalDate || toDateISO();
+  const toolId = route?.params?.toolId as string | undefined; 
 
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [goals, setGoals] = useState<any[]>([]);
@@ -121,7 +122,7 @@ export default function JournalScreen({ route }: any) {
       await firestore()
         .doc(`users/${uid}/conversations/${cid}`)
         .set({ mood: label }, { merge: true });
-      navigation.navigate('Chat', { journalDate });
+        navigation.navigate('Chat', { journalDate, toolId });
     } catch (err) {
       console.error('Error saving mood:', err);
     }
