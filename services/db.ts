@@ -8,9 +8,7 @@ export type StoredMessage = {
   createdAt?: FirebaseFirestoreTypes.FieldValue;
 };
 
-/**
- * Format a JS date into YYYY-MM-DD (journal key)
- */
+// Format a JS date into YYYY-MM-DD (journal key)
 export function toDateISO(d: Date = new Date()): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -136,7 +134,6 @@ export async function getMessages(conversationId: string) {
  */
 export async function addGoal(title: string, dateISO: string, sourceConversationId?: string) {
   const uid = getAuth(getApp()).currentUser?.uid;
-  console.log('[addGoal]', { uid, title, dateISO });
   if (!uid) throw new Error('Not signed in');
 
   await firestore()
@@ -179,8 +176,6 @@ export async function deleteGoal(goalId: string) {
  */
 export function onGoalsByDate(dateISO: string, callback: (rows: any[]) => void) {
   const uid = getAuth(getApp()).currentUser?.uid;
-  console.log('[onGoalsByDate] subscribe for date', dateISO);
-
   if (!uid) throw new Error('Not signed in');
 
   return firestore()
@@ -190,8 +185,6 @@ export function onGoalsByDate(dateISO: string, callback: (rows: any[]) => void) 
     .onSnapshot(
       (snap) => {
         const rows = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-        console.log('[onGoalsByDate] snapshot size', snap.size);
-
         callback(rows);
       },
       (error) => {
@@ -208,7 +201,26 @@ export type ChatSuggestion = {
   title: string;
   date: string; // YYYY-MM-DD
   source: 'chat';
-  createdAt: FirebaseFirestoreTypes.FieldValue | number;
+  // When reading, Firestore returns Timestamp; when writing, we send FieldValue
+  createdAt?: FirebaseFirestoreTypes.Timestamp | FirebaseFirestoreTypes.FieldValue;
+};
+
+export type GoalDoc = {
+  id: string;
+  title: string;
+  done: boolean;
+  date: string; // YYYY-MM-DD
+  createdAt?: FirebaseFirestoreTypes.Timestamp | FirebaseFirestoreTypes.FieldValue;
+  sourceConversationId?: string | null;
+};
+
+export type ConversationDoc = {
+  id: string;
+  title?: string;
+  date?: string; // YYYY-MM-DD
+  mood?: string | null;
+  createdAt?: FirebaseFirestoreTypes.Timestamp | FirebaseFirestoreTypes.FieldValue;
+  updatedAt?: FirebaseFirestoreTypes.Timestamp | FirebaseFirestoreTypes.FieldValue;
 };
 
 // ---------------------------------------------------
@@ -235,7 +247,7 @@ export async function addChatSuggestions(
     const docRef = colRef.doc();
     batch.set(docRef, {
       title: title.trim(),
-      date: dateISO,
+      date: dateISO,           // IMPORTANT: field name is "date" (Insights/Journal rely on this)
       source: 'chat',
       createdAt: now,
     });
@@ -271,4 +283,55 @@ export function onChatSuggestionsByDate(
         console.error('onChatSuggestionsByDate error:', error);
       }
     );
+}
+
+// ---------------------------------------------------
+// INSIGHTS HELPERS (used by InsightsScreen)
+// ---------------------------------------------------
+
+// Get all goals on a specific date
+export async function getGoalsByDate(dateISO: string): Promise<GoalDoc[]> {
+  const uid = getAuth(getApp()).currentUser?.uid;
+  if (!uid) throw new Error('Not signed in');
+
+  const snap = await firestore()
+    .collection(`users/${uid}/goals`)
+    .where('date', '==', dateISO)
+    .get();
+
+  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as GoalDoc[];
+}
+
+// Get goals for multiple dates (returns map by date)
+export async function getGoalsByDates(dates: string[]): Promise<Record<string, GoalDoc[]>> {
+  const out: Record<string, GoalDoc[]> = {};
+  for (const dateISO of dates) {
+    out[dateISO] = await getGoalsByDate(dateISO);
+  }
+  return out;
+}
+
+// Get the conversation for a date (to read mood)
+export async function getConversationByDate(dateISO: string): Promise<ConversationDoc | null> {
+  const uid = getAuth(getApp()).currentUser?.uid;
+  if (!uid) throw new Error('Not signed in');
+
+  const snap = await firestore()
+    .collection(`users/${uid}/conversations`)
+    .where('date', '==', dateISO)
+    .limit(1)
+    .get();
+
+  if (snap.empty) return null;
+  const doc = snap.docs[0];
+  return { id: doc.id, ...(doc.data() as any) } as ConversationDoc;
+}
+
+// Get conversations for multiple dates (returns map by date)
+export async function getConversationsByDates(dates: string[]): Promise<Record<string, ConversationDoc | null>> {
+  const out: Record<string, ConversationDoc | null> = {};
+  for (const dateISO of dates) {
+    out[dateISO] = await getConversationByDate(dateISO);
+  }
+  return out;
 }
