@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl } from 'react-native';
 import { getAuth } from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 
@@ -37,7 +37,7 @@ function clamp(n: number, min: number, max: number) {
 type DayGoalStats = { date: string; done: number; total: number };
 type MoodDay = { date: string; mood?: string | null };
 
-// ---------- Firestore fetchers (simple and clear for MVP) ----------
+// ---------- Firestore fetchers ----------
 async function fetchGoalsByDate(dateISO: string): Promise<DayGoalStats> {
   const uid = getAuth().currentUser?.uid;
   if (!uid) throw new Error('Not signed in');
@@ -50,18 +50,17 @@ async function fetchGoalsByDate(dateISO: string): Promise<DayGoalStats> {
   snap.forEach((doc) => {
     const g = doc.data() as any;
     total += 1;
+    // If your field is named differently (e.g., "completed"), change below accordingly:
     if (g.done) done += 1;
   });
   return { date: dateISO, done, total };
 }
 
 async function fetchGoalsByDates(dates: string[]): Promise<Record<string, DayGoalStats>> {
-  const out: Record<string, DayGoalStats> = {};
-  // Sequential for simplicity; can be parallelized later
-  for (const d of dates) {
-    out[d] = await fetchGoalsByDate(d);
-  }
-  return out;
+  const pairs = await Promise.all(
+    dates.map(async (d) => [d, await fetchGoalsByDate(d)] as const)
+  );
+  return Object.fromEntries(pairs);
 }
 
 async function fetchMoodByDate(dateISO: string): Promise<MoodDay> {
@@ -74,20 +73,23 @@ async function fetchMoodByDate(dateISO: string): Promise<MoodDay> {
     .get();
   if (snap.empty) return { date: dateISO, mood: null };
   const data = snap.docs[0].data() as any;
+  // If you store mood elsewhere, adjust here.
   return { date: dateISO, mood: data.mood ?? null };
 }
 
 async function fetchMoodsByDates(dates: string[]): Promise<Record<string, MoodDay>> {
-  const out: Record<string, MoodDay> = {};
-  for (const d of dates) out[d] = await fetchMoodByDate(d);
-  return out;
+  const pairs = await Promise.all(
+    dates.map(async (d) => [d, await fetchMoodByDate(d)] as const)
+  );
+  return Object.fromEntries(pairs);
 }
 
 export default function InsightsScreen() {
+  // Freeze "today" at mount so mid‑session rollover doesn’t shift arrays
   const todayISO = useMemo(() => toDateISO(), []);
   const weekStart = useMemo(() => weekStartISO(todayISO), [todayISO]);
 
-  // Memoize date arrays so their identity only changes when inputs change
+  // Memoize date arrays so identity is stable
   const last7Dates = useMemo(() => rangeDays(todayISO, 7), [todayISO]);
   const thisWeekDates = useMemo(
     () => rangeDays(addDays(weekStart, 6), 7),
@@ -99,30 +101,55 @@ export default function InsightsScreen() {
   const [todayStats, setTodayStats] = useState<DayGoalStats | null>(null);
   const [moodMap, setMoodMap] = useState<Record<string, MoodDay>>({});
 
-  // Load goals and moods for cards/charts
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const [seven, week, todayOnly, moods7] = await Promise.all([
-          fetchGoalsByDates(last7Dates),
-          fetchGoalsByDates(thisWeekDates),
-          fetchGoalsByDates([todayISO]),
-          fetchMoodsByDates(last7Dates),
-        ]);
-        if (!mounted) return;
-        setSevenDayStats(seven);
-        setWeekStats(week);
-        setTodayStats(todayOnly[todayISO] ?? { date: todayISO, done: 0, total: 0 });
-        setMoodMap(moods7);
-      } catch {
-        // Optional: show a lightweight error UI/state
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<null | 'not-signed-in' | 'load-failed'>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0); // to force reload on pull-to-refresh
+
+  async function loadAll() {
+    setError(null);
+    setLoading(true);
+    try {
+      const uid = getAuth().currentUser?.uid;
+      if (!uid) {
+        setError('not-signed-in');
+        setSevenDayStats({});
+        setWeekStats({});
+        setTodayStats({ date: todayISO, done: 0, total: 0 });
+        setMoodMap({});
+        return;
       }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [todayISO, last7Dates, thisWeekDates]);
+      const [seven, week, todayOnly, moods7] = await Promise.all([
+        fetchGoalsByDates(last7Dates),
+        fetchGoalsByDates(thisWeekDates),
+        fetchGoalsByDates([todayISO]),
+        fetchMoodsByDates(last7Dates),
+      ]);
+      setSevenDayStats(seven);
+      setWeekStats(week);
+      setTodayStats(todayOnly[todayISO] ?? { date: todayISO, done: 0, total: 0 });
+      setMoodMap(moods7);
+    } catch (e) {
+      setError('load-failed');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todayISO, last7Dates, thisWeekDates, refreshKey]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      setRefreshKey((k) => k + 1);
+    } finally {
+      // Small delay so UI shows the spinner briefly
+      setTimeout(() => setRefreshing(false), 400);
+    }
+  };
 
   // Derived: 7-day streak ending today (consecutive days with ≥1 done)
   const sevenDayStreak = useMemo(() => {
@@ -173,12 +200,33 @@ export default function InsightsScreen() {
   const todayTotal = todayStats?.total ?? 0;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 100 }}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingBottom: 100 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Your Insights</Text>
         <Text style={styles.headerSub}>Track your progress</Text>
       </View>
+
+      {/* Informational banners */}
+      {loading && (
+        <View style={[styles.card, { marginTop: 12 }]}>
+          <Text style={{ color: '#374151' }}>Loading insights…</Text>
+        </View>
+      )}
+      {error === 'not-signed-in' && (
+        <View style={[styles.card, { marginTop: 12, backgroundColor: '#fff7ed', borderColor: '#fdba74', borderWidth: 1 }]}>
+          <Text style={{ color: '#9a3412' }}>Please sign in to see insights.</Text>
+        </View>
+      )}
+      {error === 'load-failed' && (
+        <View style={[styles.card, { marginTop: 12, backgroundColor: '#fef2f2', borderColor: '#fecaca', borderWidth: 1 }]}>
+          <Text style={{ color: '#7f1d1d' }}>Couldn’t load insights. Pull to refresh or try again later.</Text>
+        </View>
+      )}
 
       {/* Today card */}
       <View style={styles.statCard}>

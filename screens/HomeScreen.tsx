@@ -1,9 +1,16 @@
 // screens/HomeScreen.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Calendar } from 'react-native-calendars';
-import { useNavigation } from '@react-navigation/native';
-import { toDateISO, onGoalsByDate, toggleGoal, deleteGoal } from '../services/db';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { getAuth, onAuthStateChanged } from '@react-native-firebase/auth';
+import {
+  toDateISO,
+  onGoalsByDate,
+  toggleGoal,
+  deleteGoal,
+  getRecentJournalDates,
+} from '../services/db';
 
 const moodOptions = [
   { emoji: '☀️', label: 'Great' },
@@ -18,21 +25,52 @@ export default function HomeScreen() {
   const navigation = useNavigation<any>();
   const [selectedDate, setSelectedDate] = useState(toDateISO());
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
-  const [markedDates, setMarkedDates] = useState({});
   const [goals, setGoals] = useState<any[]>([]);
 
-  // Mark today by default
+  // Auth readiness so we only query after user is known
+  const [authReady, setAuthReady] = useState(false);
   useEffect(() => {
-    setMarkedDates({
-      [toDateISO()]: { selected: true, marked: true, selectedColor: '#a25cb2' },
-    });
+    const auth = getAuth();
+    const unsub = onAuthStateChanged(auth, () => setAuthReady(true));
+    return unsub;
   }, []);
 
-  // Realtime goals data
+  // Realtime goals for the currently selected date
   useEffect(() => {
+    if (!authReady) return;
     const unsubscribe = onGoalsByDate(selectedDate, setGoals);
     return () => unsubscribe && unsubscribe();
-  }, [selectedDate]);
+  }, [authReady, selectedDate]);
+
+  // Load all dates with a journal conversation and build markedDates
+  const [journalDates, setJournalDates] = useState<Set<string>>(new Set());
+  const loadJournalDates = useCallback(async () => {
+    try {
+      const dates = await getRecentJournalDates(180);
+      setJournalDates(new Set(dates));
+    } catch {
+      setJournalDates(new Set());
+    }
+  }, []);
+
+  // Refresh highlight dates when Home regains focus or when auth becomes ready
+  useFocusEffect(
+    useCallback(() => {
+      if (authReady) loadJournalDates();
+    }, [authReady, loadJournalDates])
+  );
+
+  // Build markedDates for Calendar, ensuring today/selected are visible
+  const markedDates = useMemo(() => {
+    const md: Record<string, any> = {};
+    journalDates.forEach((d) => {
+      md[d] = { ...(md[d] || {}), marked: true, dotColor: '#f5576c' };
+    });
+    // Keep the selected day visually selected
+    md[selectedDate] = { ...(md[selectedDate] || {}), selected: true, selectedColor: '#a25cb2' };
+    // Optionally: highlight today text color via Calendar theme (below)
+    return md;
+  }, [journalDates, selectedDate]);
 
   const onDayPress = (day: { dateString: string }) => {
     setSelectedDate(day.dateString);
@@ -43,7 +81,7 @@ export default function HomeScreen() {
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 100 }}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Good morning, Bhumi</Text>
+        <Text style={styles.headerTitle}>Good morning</Text>
         <Text style={styles.headerSub}>How are you feeling today?</Text>
       </View>
 
@@ -51,12 +89,14 @@ export default function HomeScreen() {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Your Journal Calendar</Text>
         <Calendar
-          markedDates={{
-            ...markedDates,
-            [selectedDate]: { selected: true, marked: true, selectedColor: '#a25cb2' },
-          }}
+          markedDates={markedDates}
           onDayPress={onDayPress}
-          theme={{ todayTextColor: '#f093fb', arrowColor: '#a25cb2' }}
+          theme={{
+            todayTextColor: '#f093fb',
+            arrowColor: '#a25cb2',
+            selectedDayBackgroundColor: '#a25cb2',
+            dotColor: '#f5576c',
+          }}
         />
       </View>
 
@@ -78,15 +118,16 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* Goals */}
+      {/* Goals for the selected date */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Goals for {selectedDate}</Text>
         {goals.length === 0 && <Text style={{ color: '#888' }}>No goals for this date yet.</Text>}
-        {goals.map(goal => (
+        {goals.map((goal) => (
           <View key={goal.id} style={styles.goalRow}>
             <TouchableOpacity
               style={styles.goalToggle}
               onPress={() => toggleGoal(goal.id, !Boolean(goal.done))}
+              activeOpacity={0.8}
             >
               <View style={[styles.checkbox, goal.done && styles.checkboxChecked]} />
               <Text style={[styles.goalText, goal.done && styles.goalDone]}>{goal.title}</Text>
@@ -94,6 +135,7 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={styles.deleteButton}
               onPress={() => deleteGoal(goal.id)}
+              activeOpacity={0.8}
             >
               <Text style={styles.deleteText}>🗑</Text>
             </TouchableOpacity>
@@ -127,6 +169,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   cardTitle: { fontSize: 18, marginBottom: 12, color: '#374151', fontWeight: '600' },
+
   moodGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   moodItem: {
     alignItems: 'center',
@@ -140,6 +183,7 @@ const styles = StyleSheet.create({
   },
   moodItemSelected: { backgroundColor: '#ede9fe', borderColor: '#a25cb2' },
   weatherIcon: { fontSize: 32, marginBottom: 8 },
+
   goalRow: {
     flexDirection: 'row',
     alignItems: 'center',

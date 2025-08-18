@@ -26,7 +26,6 @@ const moodOptions: Mood[] = [
   { emoji: '🌨️', label: 'Snowy' },
 ];
 
-// Normalize a title for dedupe and display checks
 const norm = (s: string) =>
   s.replace(/[•\-–—]+/g, ' ')
     .replace(/\s+/g, ' ')
@@ -35,7 +34,7 @@ const norm = (s: string) =>
 export default function JournalScreen({ route }: any) {
   const navigation = useNavigation<any>();
   const journalDate = route?.params?.journalDate || toDateISO();
-  const toolId = route?.params?.toolId as string | undefined; 
+  const toolId = route?.params?.toolId as string | undefined;
 
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [goals, setGoals] = useState<any[]>([]);
@@ -44,23 +43,37 @@ export default function JournalScreen({ route }: any) {
   const [chatSuggestions, setChatSuggestions] = useState<string[]>([]);
   const [recentlyAdded, setRecentlyAdded] = useState<Set<string>>(new Set());
 
-  // Realtime goals for this date
   useEffect(() => {
     const unsubscribe = onGoalsByDate(journalDate, setGoals);
     return () => unsubscribe && unsubscribe();
   }, [journalDate]);
 
-  // Realtime chat suggestions for this date
+  // Ensure conversation exists for this date, then attach suggestions listener scoped to (cid, date)
   useEffect(() => {
     let unsub: null | (() => void) = null;
     let cancelled = false;
 
     (async () => {
-      const cid = await getDailyConversationId(journalDate);
+      const uid = getAuth().currentUser?.uid;
+      if (!uid) {
+        setChatSuggestions([]);
+        return;
+      }
+
+      let cid = await getDailyConversationId(journalDate);
+      if (!cid) {
+        try {
+          cid = await ensureDailyConversation(journalDate, `Journal for ${journalDate}`);
+        } catch {
+          setChatSuggestions([]);
+          return;
+        }
+      }
       if (cancelled || !cid) {
         setChatSuggestions([]);
         return;
       }
+
       unsub = onChatSuggestionsByDate(cid, journalDate, (items) => {
         const titles = items.map((i) => i.title);
         setChatSuggestions(titles);
@@ -73,7 +86,7 @@ export default function JournalScreen({ route }: any) {
     };
   }, [journalDate]);
 
-  // Merge static mood suggestions + chat suggestions, filter out existing goals & duplicates, keep chat a bit more permissive
+  // Merge static mood suggestions + chat suggestions, filter out existing goals & duplicates
   useEffect(() => {
     const existing = goals.map((g) => norm(g.title).toLowerCase());
 
@@ -83,7 +96,6 @@ export default function JournalScreen({ route }: any) {
       existing
     });
 
-    // Chat items: allow up to 10 words/80 chars (we truncate visually)
     const chatOnly = chatSuggestions
       .map(norm)
       .filter((t) => !existing.includes(t.toLowerCase()))
@@ -121,8 +133,9 @@ export default function JournalScreen({ route }: any) {
       if (!uid) return;
       await firestore()
         .doc(`users/${uid}/conversations/${cid}`)
-        .set({ mood: label }, { merge: true });
-        navigation.navigate('Chat', { journalDate, toolId });
+        .set({ mood: label, updatedAt: firestore.FieldValue.serverTimestamp() }, { merge: true });
+
+      navigation.navigate('Chat', { journalDate, toolId });
     } catch (err) {
       console.error('Error saving mood:', err);
     }
@@ -137,7 +150,6 @@ export default function JournalScreen({ route }: any) {
 
   const handleAddSuggestion = async (title: string) => {
     await addGoal(title, journalDate);
-    // show a transient "Added" state on chip
     const k = norm(title).toLowerCase();
     setRecentlyAdded((prev) => {
       const next = new Set(prev);
@@ -154,8 +166,7 @@ export default function JournalScreen({ route }: any) {
   };
 
   const truncated = useMemo(
-    () =>
-      suggested.map((t) => (t.length > 60 ? t.slice(0, 57).trim() + '…' : t)),
+    () => suggested.map((t) => (t.length > 60 ? t.slice(0, 57).trim() + '…' : t)),
     [suggested]
   );
 
@@ -185,11 +196,10 @@ export default function JournalScreen({ route }: any) {
         </View>
       </View>
 
-      {/* Goals section */}
+      {/* Goals */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Goals for {journalDate}</Text>
 
-        {/* Add goal row */}
         <View style={styles.addGoalRow}>
           <TextInput
             style={styles.goalInput}
@@ -203,7 +213,6 @@ export default function JournalScreen({ route }: any) {
           </TouchableOpacity>
         </View>
 
-        {/* Existing goals */}
         {goals.map((goal) => (
           <View key={goal.id} style={styles.goalRow}>
             <TouchableOpacity
@@ -221,7 +230,7 @@ export default function JournalScreen({ route }: any) {
         ))}
       </View>
 
-      {/* Suggested Goals as compact chips */}
+      {/* Suggested Goals */}
       {truncated.length > 0 && (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Quick wins for today</Text>
@@ -338,8 +347,6 @@ const styles = StyleSheet.create({
   checkboxChecked: { backgroundColor: '#a25cb2', borderColor: '#a25cb2' },
   goalText: { fontSize: 15, color: '#374151' },
   goalDone: { textDecorationLine: 'line-through', color: '#9ca3af' },
-
-  // Chips
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     flexDirection: 'row',
@@ -352,10 +359,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
     marginBottom: 8,
   },
-  chipText: {
-    maxWidth: 220,
-    color: '#374151',
-  },
+  chipText: { maxWidth: 220, color: '#374151' },
   chipAdd: {
     marginLeft: 8,
     backgroundColor: '#f5576c',
@@ -365,5 +369,3 @@ const styles = StyleSheet.create({
   },
   chipAddText: { color: '#fff', fontWeight: '700' },
 });
-
-
