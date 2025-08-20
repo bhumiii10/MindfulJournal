@@ -80,3 +80,4 @@ ios/Pods/
 
 # Ignore vendor folder
 vendor/
+.env
