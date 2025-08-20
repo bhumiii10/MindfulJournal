@@ -9,7 +9,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>org.reactjs.native.example.MindfulJournal</string>
+	<string>com.bhumicompany.mindfuljournal.demo</string>
 	<key>PROJECT_ID</key>
 	<string>mindfuljournal-c6289</string>
 	<key>STORAGE_BUCKET</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:620303538802:ios:8f981621d8d4c596dac0eb</string>
+	<string>1:620303538802:ios:0bf0853e0dc80811dac0eb</string>
 </dict>
 </plist>
