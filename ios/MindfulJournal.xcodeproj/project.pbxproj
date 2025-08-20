@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1283454F2E5645CA00ECCF51 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1283454E2E5645CA00ECCF51 /* Assets.xcassets */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
@@ -16,6 +17,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		1283454E2E5645CA00ECCF51 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* MindfulJournal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MindfulJournal.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = MindfulJournal/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = MindfulJournal/Info.plist; sourceTree = "<group>"; };
@@ -50,6 +52,7 @@
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
 				9AAABBBBCCCCDDDDEEEE1111 /* GoogleService-Info.plist */,
+				1283454E2E5645CA00ECCF51 /* Assets.xcassets */,
 			);
 			name = MindfulJournal;
 			sourceTree = "<group>";
@@ -167,6 +170,7 @@
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				A66C0E604AB3A827C02D724E /* PrivacyInfo.xcprivacy in Resources */,
 				9AAABBBBCCCCDDDDEEEE2222 /* GoogleService-Info.plist in Resources */,
+				1283454F2E5645CA00ECCF51 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
