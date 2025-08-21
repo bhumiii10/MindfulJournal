@@ -1,6 +1,0 @@
-module FirebasePerformance {
-  umbrella header "FirebasePerformance-umbrella.h"
-
-  export *
-  module * { export * }
-}

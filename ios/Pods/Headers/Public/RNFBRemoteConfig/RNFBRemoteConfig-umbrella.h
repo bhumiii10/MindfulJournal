@@ -1,1 +1,0 @@
-../../../Target Support Files/RNFBRemoteConfig/RNFBRemoteConfig-umbrella.h

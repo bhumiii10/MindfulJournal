@@ -1,6 +1,0 @@
-module RNFBCrashlytics {
-  umbrella header "RNFBCrashlytics-umbrella.h"
-
-  export *
-  module * { export * }
-}

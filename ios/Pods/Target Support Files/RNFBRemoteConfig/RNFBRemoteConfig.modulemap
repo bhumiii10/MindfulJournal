@@ -1,6 +1,0 @@
-module RNFBRemoteConfig {
-  umbrella header "RNFBRemoteConfig-umbrella.h"
-
-  export *
-  module * { export * }
-}
