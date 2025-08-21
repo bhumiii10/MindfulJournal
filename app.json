@@ -1,4 +1,24 @@
 {
-  "name": "MindfulJournal",
-  "displayName": "MindfulJournal"
+    "expo": {
+        "name": "MindfulJournal",
+        "slug": "mindfuljournal",
+        "owner": "bhumikaattri",
+        "scheme": "mindfuljournal",
+        "ios": {
+            "bundleIdentifier": "com.bhumicompany.mindfuljournal.demo"
+        },
+        "android": {
+            "package": "com.bhumicompany.mindfuljournal.demo"
+        },
+        "extra": {
+            "ENDPOINT": "http://127.0.0.1:5001/mindfuljournal-c6289/us-central1/proxyPerplexity",
+            "eas": {
+                "projectId": "554a46f4-ae0a-4465-9311-00c82ea60299"
+            }
+        },
+        "updates": {
+            "enabled": true,
+            "url": "https://u.expo.dev/554a46f4-ae0a-4465-9311-00c82ea60299"
+        }
+    }
 }

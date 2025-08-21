@@ -1,0 +1,2 @@
+${PODS_XCFRAMEWORKS_BUILD_DIR}/FirebaseAnalytics/Core/FirebaseAnalytics.framework
+${PODS_XCFRAMEWORKS_BUILD_DIR}/FirebaseAnalytics/IdentitySupport/FirebaseAnalytics.framework

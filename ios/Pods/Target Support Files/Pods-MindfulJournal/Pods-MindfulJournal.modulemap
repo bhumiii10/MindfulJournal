@@ -1,0 +1,6 @@
+module Pods_MindfulJournal {
+  umbrella header "Pods-MindfulJournal-umbrella.h"
+
+  export *
+  module * { export * }
+}

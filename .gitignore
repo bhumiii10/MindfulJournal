@@ -80,3 +80,7 @@ ios/Pods/
 
 # Ignore vendor folder
 vendor/
+
+# Expo prebuild (CNG)
+ios/
+android/
