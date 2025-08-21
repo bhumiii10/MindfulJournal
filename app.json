@@ -3,12 +3,15 @@
         "name": "MindfulJournal",
         "slug": "mindfuljournal",
         "ios": {
-            "bundleIdentifier": "com.bhumicompany.mindfuljournal.demo",
-            "icon": "./assets/icon.png"
+            "bundleIdentifier": "com.bhumicompany.mindfuljournal.demo"
         },
         "android": {
             "package": "com.bhumicompany.mindfuljournal.demo"
         },
-        "icon": "./assets/icon.png"
+        "extra": {
+            "eas": {
+                "projectId": "554a46f4-ae0a-4465-9311-00c82ea60299"
+            }
+        }
     }
 }
