@@ -1,0 +1,13 @@
+{
+    "build": {
+        "development": {
+            "env": { "APP_ENV": "development" }
+        },
+        "production": {
+            "env": { "APP_ENV": "production" }
+        }
+    },
+    "submit": {
+        "production": {}
+    }
+}
