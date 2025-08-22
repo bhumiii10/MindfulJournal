@@ -1,59 +1,97 @@
-// api/src/services/chat.ts
+// Known-good full file: api/src/services/chat.ts
+// Copy-paste this whole file verbatim.
 import { getApp } from '@react-native-firebase/app';
 import { getAuth } from '@react-native-firebase/auth';
+import { FUNCTION_URL } from '../../../src/config/env';
 
-const API_BASE = 'http://localhost:8080'; // iOS Simulator -> Mac
+export type ChatRole = 'system' | 'user' | 'assistant';
+export type ChatMessage = { role: ChatRole; content: string };
+export type ChatResponse = { reply: string; raw?: unknown };
 
-export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
-
-type ChatResponse = { reply: string };
+function toSinglePrompt(messages: ChatMessage[]): string {
+  return messages.map((m) => `${m.role}: ${m.content}`).join('\n');
+}
 
 export async function callChat(messages: ChatMessage[]): Promise<ChatResponse> {
-  const auth = getAuth(getApp());
-  const user = auth.currentUser;
-  if (!user) throw new Error('Not signed in');
+  if (!FUNCTION_URL) {
+    throw new Error('Function URL not configured');
+  }
 
-  // Firebase v22+ note in RN: getIdToken() is the correct API (already used)
-  const idToken = await user.getIdToken();
+  // Optional: include Firebase ID token if signed-in
+  let idToken: string | undefined;
+  try {
+    const auth = getAuth(getApp());
+    const user = auth.currentUser;
+    if (user) {
+      idToken = await user.getIdToken();
+    }
+  } catch {
+    // Auth not available; proceed without token
+  }
 
-  // Minimal hardening: normalize roles and ensure non-empty content
+  // Normalize roles/content
   const payload: ChatMessage[] = messages.map((m) => {
-    const role: 'system' | 'user' | 'assistant' =
-      m.role === 'assistant' || m.role === 'system' ? m.role : 'user';
-    const raw = typeof m.content === 'string' ? m.content : String(m.content ?? '');
-    const content = raw.trim() || ' ';
+    const role: ChatRole = m.role === 'assistant' || m.role === 'system' ? m.role : 'user';
+    const content =
+      (typeof m.content === 'string' ? m.content : String(m.content ?? '')).trim() || ' ';
     return { role, content };
   });
 
-  // DEBUG: outbound payload (roles + first few messages)
-  try {
-    // eslint-disable-next-line no-console
-    console.log('[callChat] OUT roles ->', payload.map((m) => m.role).join(' | '));
-    // eslint-disable-next-line no-console
-    console.log('[callChat] OUT first ->', JSON.stringify(payload.slice(0, 6), null, 2));
-  } catch {
-    // ignore logging errors
-  }
+  // Build headers
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (idToken) headers.Authorization = `Bearer ${idToken}`;
 
-  const res = await fetch(`${API_BASE}/chat`, {
+  // Send to your Firebase Function
+  const res = await fetch(FUNCTION_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${idToken}`,
-    },
-    body: JSON.stringify({
-      model: 'sonar',
-      temperature: 0.7,
-      stream: false,
-      messages: payload,
-    }),
+    headers,
+    // If your function expects { prompt }:
+    body: JSON.stringify({ prompt: toSinglePrompt(payload) }),
+    // If your function expects { messages }, switch to:
+    // body: JSON.stringify({ messages: payload }),
   });
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Chat failed: ${res.status} - ${text}`);
+  // Parse body safely
+  let data: unknown;
+  try {
+    data = await res.json();
+  } catch {
+    data = {};
   }
 
-  const data = (await res.json()) as ChatResponse;
-  return data;
+  if (!res.ok) {
+    const anyData = data as Record<string, unknown>;
+    const errMsg =
+      (typeof anyData?.error === 'string' && anyData.error) ||
+      (typeof (anyData?.error as { message?: string })?.message === 'string' &&
+        (anyData.error as { message: string }).message) ||
+      (typeof anyData?.message === 'string' && (anyData.message as string)) ||
+      `Upstream error: ${res.status}`;
+    throw new Error(errMsg);
+  }
+
+  // Extract assistant text from common shapes
+  const anyData = data as Record<string, unknown>;
+  let reply: string | undefined;
+
+  const choices = (anyData?.choices as Array<unknown>) || [];
+  const firstChoice =
+    Array.isArray(choices) && choices.length > 0
+      ? (choices[0] as Record<string, unknown>)
+      : undefined;
+  const message = (firstChoice?.message as Record<string, unknown>) || undefined;
+
+  if (typeof message?.content === 'string') {
+    reply = message.content as string;
+  } else if (typeof anyData?.reply === 'string') {
+    reply = anyData.reply as string;
+  } else if (typeof anyData?.content === 'string') {
+    reply = anyData.content as string;
+  }
+
+  if (!reply) {
+    reply = typeof data === 'string' ? (data as string) : JSON.stringify(data);
+  }
+
+  return { reply, raw: data };
 }
