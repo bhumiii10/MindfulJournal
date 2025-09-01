@@ -74,3 +74,8 @@ Tap “Summarize” to generate a daily recap and suggested grounding exercises 
 
 Entries and summaries sync automatically; usable offline with delta sync when back online.
 
+
+https://github.com/user-attachments/assets/02521869-3770-4c1e-b091-fdeeca49ad9a
+
+
+
