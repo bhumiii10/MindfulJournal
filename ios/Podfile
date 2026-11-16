@@ -32,5 +32,14 @@ target 'MindfulJournal' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+
+    # Xcode 26 (clang 21) rejects fmt 11.0.2's consteval format strings under C++20.
+    # Build the fmt pod as C++17 so it falls back to the non-consteval path.
+    installer.pods_project.targets.each do |target|
+      next unless target.name == 'fmt'
+      target.build_configurations.each do |bc|
+        bc.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+      end
+    end
   end
 end

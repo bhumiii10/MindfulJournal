@@ -11,11 +11,10 @@ import {
   Platform,
 } from 'react-native';
 
-import { callChat, type ChatMessage } from '../api/src/services/chat';
+import { callChat, type ChatMessage } from '../services/chat';
 import {
   ensureDailyConversation,
   addMessage,
-  toDateISO,
   getMessages,
   getDailyConversationId,
   addChatSuggestions,
@@ -24,6 +23,7 @@ import {
   getConversationByDate,
 } from '../services/db';
 import { toolsCatalog } from '../data/tools';
+import { useActiveDate } from '../services/activeDate';
 
 type Message = { id: string; text: string; sender: 'bot' | 'user' };
 
@@ -95,7 +95,7 @@ async function extractGoalsFromReply(reply: string): Promise<string[]> {
 }
 
 export default function ChatScreen({ route, navigation }: any) {
-  const journalDate = route?.params?.journalDate || toDateISO();
+  const journalDate = useActiveDate();
   const initialConversationId = route?.params?.conversationId || null;
   const initialToolId = route?.params?.toolId as string | undefined;
 

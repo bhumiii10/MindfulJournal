@@ -57,7 +57,7 @@ app.get('/health', (_req, res) => {
  * Body:
  * {
  *   messages: Array<{ role: 'system'|'user'|'assistant', content: string }>,
- *   model?: string,        // default 'sonar'
+ *   model?: string,        // default GEMINI_MODEL env, else 'gemini-2.5-flash'
  *   temperature?: number,  // default 0.7
  *   stream?: boolean       // default false
  * }
@@ -66,7 +66,7 @@ app.post('/chat', requireAuth, async (req, res) => {
   try {
     const {
       messages,
-      model = 'sonar',
+      model = process.env.GEMINI_MODEL || 'gemini-2.5-flash',
       temperature = 0.7,
       stream = false,
     }: {
@@ -80,9 +80,9 @@ app.post('/chat', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'messages array required' });
     }
 
-    const apiKey = process.env.PPLX_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return res.status(500).json({ error: 'Missing PPLX_API_KEY server env' });
+      return res.status(500).json({ error: 'Missing GEMINI_API_KEY server env' });
     }
 
     // 1) Normalize roles/content (avoid empty content; coerce roles)
@@ -122,7 +122,7 @@ app.post('/chat', requireAuth, async (req, res) => {
       });
     }
 
-    // 4) Log what we will send to Perplexity (roles + first few messages)
+    // 4) Log what we will send to Gemini (roles + first few messages)
     try {
       // eslint-disable-next-line no-console
       console.log('[server:/chat] OUT roles ->', folded.map((m) => m.role).join(' | '));
@@ -132,8 +132,8 @@ app.post('/chat', requireAuth, async (req, res) => {
       // ignore
     }
 
-    // 5) Forward to Perplexity as-is (no extra injection or filtering)
-    const resp: Response = await fetch('https://api.perplexity.ai/chat/completions', {
+    // 5) Forward to Gemini's OpenAI-compatible endpoint as-is (no extra injection or filtering)
+    const resp: Response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -149,7 +149,7 @@ app.post('/chat', requireAuth, async (req, res) => {
 
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
-      return res.status(resp.status).json({ error: 'Perplexity error', details: text });
+      return res.status(resp.status).json({ error: 'Gemini error', details: text });
     }
 
     const data: any = await resp.json();

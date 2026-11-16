@@ -1,3 +1,4 @@
+import './services/firebaseEmulators'; // must come first: connects dev builds to the local emulators
 import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { ActivityIndicator, View } from 'react-native';

@@ -5,12 +5,12 @@ import { Calendar } from 'react-native-calendars';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { getAuth, onAuthStateChanged } from '@react-native-firebase/auth';
 import {
-  toDateISO,
   onGoalsByDate,
   toggleGoal,
   deleteGoal,
   getRecentJournalDates,
 } from '../services/db';
+import { useActiveDate, setActiveDate } from '../services/activeDate';
 
 const moodOptions = [
   { emoji: '☀️', label: 'Great' },
@@ -23,7 +23,7 @@ const moodOptions = [
 
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
-  const [selectedDate, setSelectedDate] = useState(toDateISO());
+  const selectedDate = useActiveDate();
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [goals, setGoals] = useState<any[]>([]);
 
@@ -73,7 +73,7 @@ export default function HomeScreen() {
   }, [journalDates, selectedDate]);
 
   const onDayPress = (day: { dateString: string }) => {
-    setSelectedDate(day.dateString);
+    setActiveDate(day.dateString);
     navigation.navigate('Journal', { journalDate: day.dateString });
   };
 

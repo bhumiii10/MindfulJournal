@@ -5,7 +5,14 @@
   "scripts": {
     "android": "react-native run-android",
     "ios": "react-native run-ios",
-    "lint": "eslint .",
+    "lint": "eslint . --ext .ts,.tsx,.js",
+    "typecheck": "tsc --noEmit",
+    "functions:install": "npm --prefix functions ci",
+    "functions:test": "npm --prefix functions test",
+    "functions:typecheck": "npm --prefix functions run typecheck",
+    "emulators": "npm --prefix functions run build && firebase emulators:start",
+    "seed": "npm --prefix functions run seed",
+    "check": "npm run lint -- --quiet && npm run typecheck && npm test -- --ci && npm run functions:typecheck && npm run functions:test",
     "start": "react-native start",
     "test": "jest"
   },
@@ -16,6 +23,7 @@
     "@react-native-firebase/crashlytics": "^23.0.0",
     "@react-native-firebase/database": "^23.0.0",
     "@react-native-firebase/firestore": "^23.0.0",
+    "@react-native-firebase/functions": "^23.0.0",
     "@react-native-firebase/messaging": "^23.0.0",
     "@react-native-firebase/perf": "^23.0.0",
     "@react-native-firebase/remote-config": "^23.0.0",

@@ -1,81 +1,107 @@
-MindfulJournal
-Smart AI journaling for iOS: chat about the day, get structured summaries and grounding exercises, and keep entries synced securely with Firebase. Built with React Native + TypeScript, Firebase Auth/Firestore/Cloud Functions, and Expo/EAS, with third‑party API access proxied via Functions (no keys in the app).
+# MindfulJournal
 
-Features
-AI journaling assistant: freeform chat that organizes thoughts, produces daily summaries, and suggests grounding exercises.
+An iOS journaling app: chat with an AI coach about your day, track daily goals and mood, do short guided wellness exercises, and see your progress over time. Built with React Native (TypeScript) and Firebase, with the AI reached through a callable Cloud Function so the API key never ships in the app.
 
-Secure auth and sync: email authentication and Firestore persistence with offline cache and indexes.
+## What's in the app
 
-Privacy‑first API usage: Perplexity requests go through Cloud Functions with Secrets; keys are never bundled in the client.
+- **Home**: a calendar that highlights days you journaled, plus a quick mood check.
+- **Journal**: per-day mood, goals (add, complete, delete) and suggested "quick wins".
+- **Chat**: an AI coach conversation that is saved as that day's entry, with a step-by-step guided mode for exercises.
+- **Insights**: day streak, a 7-day goals chart, weekly completion and mood distribution.
+- **Tools**: a catalog of short evidence-aligned exercises you can filter, add as goals, or run in guided chat.
+- **Profile**: your account and the AI-generated daily summaries.
 
-Reliable local dev: Firebase emulators for Auth, Firestore, and Functions; deterministic seed data for repeatable testing.
+Sign-in is email and password through Firebase Auth. The only login screen today is a dev login.
 
-iOS delivery: Expo/EAS build and run with Apple provisioning; Metro bundler for fast iteration.
+## How it works
 
-Tech stack
-Client: React Native, TypeScript, React Navigation, Expo.
+```
+App (React Native)
+  ├─ Firebase Auth ─────────── email/password sign-in
+  ├─ Cloud Firestore ───────── users/{uid}/conversations (+ messages, suggestions), goals, summaries
+  └─ callable Function "chat" ─ the only path to the AI
+        ├─ requires a signed-in user (checked by Firebase)
+        ├─ validates and tidies the messages
+        ├─ rate limits per user (20 requests/minute)
+        ├─ idempotent: a repeated requestId returns the saved answer instead of calling the AI again
+        ├─ retries 429s, 5xx errors and network failures with exponential backoff and jitter
+        └─ calls Gemini with a server-side key (never in the app)
+```
 
-Backend: Firebase Auth, Firestore, Cloud Functions (TypeScript, Admin SDK).
+Firestore security rules (`firestore.rules`) let each user read and write only their own data. The function's bookkeeping collections (`aiRequests`, `rateLimits`) are server-only: clients are denied.
 
-AI: Perplexity API integration via callable HTTPS Functions with retries/backoff and idempotency guards.
+## Status
 
-Tooling: npm/Node, Git/GitHub, Xcode, VS Code.
+Development uses the **Firebase emulators**. The Cloud Function is real, deployable code, but it is **not deployed** to a Firebase project: deploying needs the Blaze (pay-as-you-go) plan. In dev builds the app connects to the local emulators automatically.
 
-Architecture
-Client app handles UI, auth, and offline‑first reads/writes; sensitive requests are sent to Cloud Functions.
+Not built yet: password reset, Apple/Google sign-in, editing or deleting journal entries, and a production deployment. There are no end-to-end UI tests.
 
-Functions validate input, check auth context, enforce rate limits, and call Perplexity; results are written to Firestore.
+## Prerequisites
 
-Collections: users, entries, sessions, summaries; composite indexes for common queries.
+- Node 22 (Node 18+ works for the app)
+- Xcode and the iOS Simulator, plus CocoaPods
+- Java 21+ (the Firestore emulator needs it) and the Firebase CLI: `npm install -g firebase-tools`
+- A Firebase project with Auth and Firestore, and its `GoogleService-Info.plist` in `ios/MindfulJournal/`
+- A Gemini API key (free from [Google AI Studio](https://aistudio.google.com/apikey))
 
-Security and privacy
-Secrets management: API keys stored in Firebase Secrets and read by Functions; no keys in the bundle or .env committed.
+## Setup
 
-Prerequisites
-Node 18+, npm or yarn; Expo CLI; Xcode (for iOS Simulator).
+```bash
+npm install
+cd ios && pod install && cd ..
+npm run functions:install
+```
 
-Firebase project with Auth and Firestore enabled; Firebase CLI installed and initialized.
+Put your Gemini key in `functions/.secret.local` (git-ignored; the emulator reads it):
 
-Setup
-Clone and install
+```
+GEMINI_API_KEY=your-key
+```
 
-git clone <repo> && cd mindfuljournal && npm install
+## Run it locally
 
-Environment
+In three terminals, from the repo root:
 
-Copy .env.example to .env; set Firebase web config; leave API keys empty (proxied via Functions).
+```bash
+npm run emulators      # Auth, Firestore and Functions emulators (UI at http://127.0.0.1:4000)
+npm run seed           # optional: a demo user and a week of journal data
+npm start              # Metro bundler
+```
 
-iOS: add GoogleServices-Info.plist to ios/ per React Native Firebase docs.
+Then build the app: `npm run ios`.
 
-Firebase Emulators (recommended)
+Dev builds point Auth, Firestore and Functions at the emulators (`services/firebaseEmulators.ts`). Set `USE_EMULATORS` to `false` there to use your real Firebase project instead. The demo user's email and password are in `functions/scripts/seed.ts`, for the local emulator only.
 
-cd functions && npm install
+## Tests and checks
 
-firebase login && firebase emulators:start (in /functions or root per setup)
+```bash
+npm run check                          # lint, typecheck, app tests, function typecheck and tests
+npm test                               # app unit tests (Jest)
+npm run functions:test                 # Cloud Function unit tests
+npm --prefix functions run test:rules:emulated   # Firestore security rules (needs Java + firebase-tools)
+```
 
-Set secrets: firebase functions:secrets:set PERPLEXITY_API_KEY
+What's covered:
 
-Run app (iOS)
+- **Cloud Function** (`functions/src`): message cleanup, retry and backoff, idempotent replays, rate limiting, error mapping (including that provider errors and keys never leak to the client).
+- **Security rules** (`functions/rules-test`): users reach only their own data; server-only collections are denied.
+- **App**: the chat client's retry logic and request ids, the daily-summary generator, goal suggestions, the exercise catalog, date helpers, and an `App` smoke test.
 
-npx expo start and press i, or npx expo run:ios after npx expo prebuild --platform ios (first time).
+GitHub Actions (`.github/workflows/ci.yml`) runs all of this on every pull request.
 
-Scripts
-App: npm start (Expo dev), npm test (Jest), npm run lint (ESLint/TS).
+## Project layout
 
-Functions: cd functions && npm run build && npm run serve (emulators) or firebase deploy --only functions.
+```
+screens/            one file per tab or screen
+services/           db.ts (Firestore), chat.ts + chatClient.ts (AI client), activeDate.ts, firebaseEmulators.ts
+utils/              summarizeDay.ts (builds the daily summary from the chat)
+data/tools.ts       the exercise catalog
+functions/          Cloud Functions (callable "chat"), emulator seed script, rules tests
+firestore.rules     security rules          firestore.indexes.json   composite indexes
+firebase.json       emulator and deploy configuration
+api/                the earlier Express proxy, no longer used by the app
+```
 
-
-EAS: npx eas build --platform ios for device builds; secrets stored in EAS/Firebase, not in repo.
-
-Usage
-Sign up with email; create or import an entry; open the AI chat to reflect on the day.
-
-Tap “Summarize” to generate a daily recap and suggested grounding exercises saved to the entry.
-
-Entries and summaries sync automatically; usable offline with delta sync when back online.
-
+## Demo
 
 https://github.com/user-attachments/assets/02521869-3770-4c1e-b091-fdeeca49ad9a
-
-
-

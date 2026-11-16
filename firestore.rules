@@ -1,0 +1,25 @@
+rules_version = '2';
+
+// Each user can read and write only their own journal data.
+// Anything not listed here is denied by default, including users/{uid}/aiRequests and
+// users/{uid}/rateLimits, which only the Cloud Function (Admin SDK) may touch.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    match /users/{uid}/conversations/{document=**} {
+      allow read, write: if isOwner(uid);
+    }
+
+    match /users/{uid}/goals/{document=**} {
+      allow read, write: if isOwner(uid);
+    }
+
+    match /users/{uid}/summaries/{document=**} {
+      allow read, write: if isOwner(uid);
+    }
+  }
+}

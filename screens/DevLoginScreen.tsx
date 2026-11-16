@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, Button, Alert, StyleSheet, SafeAreaView } from 'react-native';
-import auth from '@react-native-firebase/auth';
+import auth, { type FirebaseAuthTypes } from '@react-native-firebase/auth';
 import analytics from '@react-native-firebase/analytics';
 
 export default function DevLoginScreen() {
 const [email, setEmail] = useState('');
 const [password, setPassword] = useState('');
 const [initializing, setInitializing] = useState(true);
-const [user, setUser] = useState<auth.FirebaseAuthTypes.User | null>(null);
+const [user, setUser] = useState<FirebaseAuthTypes.User | null>(null);
 useEffect(() => {
 const sub = auth().onAuthStateChanged(async (u) => {
 setUser(u);
@@ -54,7 +54,6 @@ return (
 <SafeAreaView style={styles.root}>
 <Text style={styles.title}>Dev Login</Text>
 
-text
   <View style={styles.panel}>
     <Text style={styles.label}>Status</Text>
     <Text style={styles.value}>

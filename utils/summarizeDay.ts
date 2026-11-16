@@ -1,5 +1,5 @@
 // utils/summarizeDay.ts
-import { callChat, type ChatMessage } from '../api/src/services/chat';
+import { callChat, type ChatMessage } from '../services/chat';
 import {
   getAllMessagesForDate,
   getGoalStatsForDate,
@@ -7,7 +7,7 @@ import {
   upsertDailySummary,
 } from '../services/db';
 
-function extractJsonBlock(s: string): string | null {
+export function extractJsonBlock(s: string): string | null {
   const start = s.indexOf('{');
   const end = s.lastIndexOf('}');
   if (start === -1 || end === -1 || end <= start) return null;
@@ -16,7 +16,7 @@ function extractJsonBlock(s: string): string | null {
 
 // Build a compact textual context from the last few user messages only.
 // This avoids sending assistant/guided boilerplate that confuses the API.
-function buildUserOnlyContext(messages: Array<{ role: string; content: unknown }>, limit = 12): string {
+export function buildUserOnlyContext(messages: Array<{ role: string; content: unknown }>, limit = 12): string {
   const userMsgs = messages
     .filter((m) => m.role === 'user')
     .map((m) => (typeof m.content === 'string' ? m.content : String(m.content ?? '')))

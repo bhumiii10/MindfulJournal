@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { addGoal, toDateISO } from '../services/db';
+import { setActiveDate } from '../services/activeDate';
 import { toolsCatalog, skills, filterBySkill, filterByMaxDuration, durationFilters, type Skill, type Tool } from '../data/tools';
 
 // Enable LayoutAnimation on Android
@@ -36,6 +37,7 @@ export default function ToolsScreen() {
 
   const handleOpenJournal = (tool: Tool) => {
     // Go to Journal first (mood), keep toolId so Chat can start guided mode
+    setActiveDate(toDateISO());
     nav.navigate('Journal', { journalDate: toDateISO(), toolId: tool.id });
     };
 

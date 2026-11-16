@@ -75,6 +75,17 @@ api/secrets/*.json
 api/.env
 api/.env.*
 
+# Firebase Functions / emulators
+functions/node_modules/
+functions/lib/
+functions/.secret.local
+functions/.env*
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+*-debug.log
+
 # Ignore Pods if not committing them
 ios/Pods/
 

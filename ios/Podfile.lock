@@ -1212,6 +1212,9 @@ PODS:
   - Firebase/Firestore (12.1.0):
     - Firebase/CoreOnly
     - FirebaseFirestore (~> 12.1.0)
+  - Firebase/Functions (12.1.0):
+    - Firebase/CoreOnly
+    - FirebaseFunctions (~> 12.1.0)
   - Firebase/Messaging (12.1.0):
     - Firebase/CoreOnly
     - FirebaseMessaging (~> 12.1.0)
@@ -1295,6 +1298,14 @@ PODS:
     - gRPC-Core (~> 1.69.0)
     - leveldb-library (~> 1.22)
     - nanopb (~> 3.30910.0)
+  - FirebaseFunctions (12.1.0):
+    - FirebaseAppCheckInterop (~> 12.1.0)
+    - FirebaseAuthInterop (~> 12.1.0)
+    - FirebaseCore (~> 12.1.0)
+    - FirebaseCoreExtension (~> 12.1.0)
+    - FirebaseMessagingInterop (~> 12.1.0)
+    - FirebaseSharedSwift (~> 12.1.0)
+    - GTMSessionFetcher/Core (< 6.0, >= 3.4)
   - FirebaseInstallations (12.1.0):
     - FirebaseCore (~> 12.1.0)
     - GoogleUtilities/Environment (~> 8.1)
@@ -1309,6 +1320,7 @@ PODS:
     - GoogleUtilities/Reachability (~> 8.1)
     - GoogleUtilities/UserDefaults (~> 8.1)
     - nanopb (~> 3.30910.0)
+  - FirebaseMessagingInterop (12.1.0)
   - FirebasePerformance (12.1.0):
     - FirebaseCore (~> 12.1.0)
     - FirebaseInstallations (~> 12.1.0)
@@ -3731,6 +3743,10 @@ PODS:
     - Firebase/Firestore (= 12.1.0)
     - React-Core
     - RNFBApp
+  - RNFBFunctions (23.0.0):
+    - Firebase/Functions (= 12.1.0)
+    - React-Core
+    - RNFBApp
   - RNFBMessaging (23.0.0):
     - Firebase/Messaging (= 12.1.0)
     - FirebaseCoreExtension
@@ -3891,6 +3907,7 @@ DEPENDENCIES:
   - "RNFBCrashlytics (from `../node_modules/@react-native-firebase/crashlytics`)"
   - "RNFBDatabase (from `../node_modules/@react-native-firebase/database`)"
   - "RNFBFirestore (from `../node_modules/@react-native-firebase/firestore`)"
+  - "RNFBFunctions (from `../node_modules/@react-native-firebase/functions`)"
   - "RNFBMessaging (from `../node_modules/@react-native-firebase/messaging`)"
   - "RNFBPerf (from `../node_modules/@react-native-firebase/perf`)"
   - "RNFBRemoteConfig (from `../node_modules/@react-native-firebase/remote-config`)"
@@ -3915,8 +3932,10 @@ SPEC REPOS:
     - FirebaseDatabase
     - FirebaseFirestore
     - FirebaseFirestoreInternal
+    - FirebaseFunctions
     - FirebaseInstallations
     - FirebaseMessaging
+    - FirebaseMessagingInterop
     - FirebasePerformance
     - FirebaseRemoteConfig
     - FirebaseRemoteConfigInterop
@@ -4093,6 +4112,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/@react-native-firebase/database"
   RNFBFirestore:
     :path: "../node_modules/@react-native-firebase/firestore"
+  RNFBFunctions:
+    :path: "../node_modules/@react-native-firebase/functions"
   RNFBMessaging:
     :path: "../node_modules/@react-native-firebase/messaging"
   RNFBPerf:
@@ -4124,8 +4145,10 @@ SPEC CHECKSUMS:
   FirebaseDatabase: 05bc094f88aa59eeadab7e30a62a6bb8ee76bf13
   FirebaseFirestore: 7f06732c905092d12a6e060aace72a28ad528190
   FirebaseFirestoreInternal: 1e6d681414d7fe2b8b99315784e242e7f301cf44
+  FirebaseFunctions: a3da4b0c69f1240ef51bbe39a78a1393b6c12323
   FirebaseInstallations: 6836550c466a6c3f753a777bec6f4e58ea228779
   FirebaseMessaging: 6538be0d8e8d0a3405407bc3813e2223287c0d17
+  FirebaseMessagingInterop: 1e9db269130b57cf791776b6c32dad1645fabca3
   FirebasePerformance: 4f89b3699eea328c32aeee940bb9e5c22cfa6645
   FirebaseRemoteConfig: d4b28137ecdf1d92ddeb886066074eb3936736a7
   FirebaseRemoteConfigInterop: a30ffe29b80e3aec9580a44ec9deb7e19e08e6e8
@@ -4216,6 +4239,7 @@ SPEC CHECKSUMS:
   RNFBCrashlytics: 117eaac058548db62b5ee56cfc230042360f0496
   RNFBDatabase: 728b7163ccfe5d387c16704b5597e50c0cff2f80
   RNFBFirestore: f7126710abeae7eed3d1781bae54724be2360b97
+  RNFBFunctions: c9df27f941c27ba51b6fe0778d19742831aaedd5
   RNFBMessaging: d2b997a24469be9e3a357cfbb13acac2b90b790a
   RNFBPerf: 3120a7ebfe401360d5c9dcaf46b16a9f9d1cfb17
   RNFBRemoteConfig: d42e7d0d6bb64942558c9edd2acfa91df7084d75
@@ -4223,6 +4247,6 @@ SPEC CHECKSUMS:
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   Yoga: 2b7a0cd38b4b0b4fdd7f353017fde11914148f98
 
-PODFILE CHECKSUM: 9e282e39b6026d4e9aa6d373368e1ded8a8d6e92
+PODFILE CHECKSUM: b93e409aeeb5a3c97a9e462b4fef4e946e445cbb
 
 COCOAPODS: 1.16.2

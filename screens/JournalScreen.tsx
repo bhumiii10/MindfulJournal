@@ -5,7 +5,6 @@ import { getAuth } from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import {
   ensureDailyConversation,
-  toDateISO,
   addGoal,
   onGoalsByDate,
   toggleGoal,
@@ -14,6 +13,7 @@ import {
   onChatSuggestionsByDate
 } from '../services/db';
 import { getSuggestedGoals } from '../services/suggestions';
+import { useActiveDate } from '../services/activeDate';
 
 type Mood = { emoji: string; label: string };
 
@@ -33,7 +33,7 @@ const norm = (s: string) =>
 
 export default function JournalScreen({ route }: any) {
   const navigation = useNavigation<any>();
-  const journalDate = route?.params?.journalDate || toDateISO();
+  const journalDate = useActiveDate();
   const toolId = route?.params?.toolId as string | undefined;
 
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
